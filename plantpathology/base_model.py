@@ -16,8 +16,8 @@ class CustomEarlyStopping(EarlyStopping):
 
 class BaseModel:
     def __init__(self,
-                 input_shape = (2048, 1365, 3),
-                 output_shape = (3, ),
+                 input_shape = (299, 299, 3), # (2048, 1365, 3),
+                 output_shape = (4, ),
                  batch_size = None,
                  epochs = 1000,
                  verbose = 2,
@@ -35,7 +35,10 @@ class BaseModel:
         self.use_multiprocessing = use_multiprocessing
         self.validation_split = validation_split
         self.testing_split = testing_split
-        self.data_generator = TrisplitImageDataGenerator(rescale=1./255., validation_split=self.validatoin_split, testing_split=self.testing_split)
+        self.data_generator = TrisplitImageDataGenerator(validation_split=self.validation_split,
+                                                         testing_split=self.testing_split,
+                                                         # rescale=1./255.,
+                                                         preprocessing_function = self.preprocessing_function)
         self.__dict__.update(kwargs)
 
         self.init()
@@ -51,7 +54,7 @@ class BaseModel:
             self.model.compile(loss=self.loss, optimizer=self.optimizer, metrics=self.metrics)
             print ("compiled: %s" % self.__class__.__name__)
 
-        self.model.summary()
+        # self.model.summary()
 
     @property
     def name(self):
@@ -66,7 +69,12 @@ class BaseModel:
 
     @property
     def loss(self):
-        return "mean_squared_error"
+        return "binary_crossentropy"
+
+    @property
+    def preprocessing_function(self):
+        """ To be overriden """
+        return None
 
     @property
     def weight_filename(self):
@@ -84,23 +92,33 @@ class BaseModel:
 
     @property
     def metrics(self):
-        return [] # "mean_squared_error"]
+        return [AUC()]
+
 
     @property
     def use_earlystopping(self):
         return False
 
     @property
+    def main_metric(self):
+        return "auc_2"
+
+    @property
+    def metric_mode(self):
+        return "max"
+
+    @property
     def earlystopping(self):
-       return EarlyStopping(monitor="val_loss", # use validation accuracy for stopping
-                            min_delta = 0.0001,
-                            patience = 50, 
-                            verbose = self.verbose,
-                            mode="auto")
+       return CustomEarlyStopping(monitor="val_%s" % self.main_metric, # use validation accuracy for stopping
+                                  mode = self.metric_mode,
+                                  # min_delta = 0.0001,
+                                  patience = 20, 
+                                  verbose = self.verbose,
+                                  target = 0.9)
 
     @property
     def modelcheckpoint(self):
-        return ModelCheckpoint(os.path.join(self.logdir, "epoch{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5"), monitor="val_loss", save_weights_only=True, save_best_only=True, period=3)
+        return ModelCheckpoint(os.path.join(self.logdir, "epoch{epoch:03d}-%(metric)s{%(metric)s:.3f}-val_%(metric)s{val_%(metric)s:.3f}.h5") % dict(metric = self.main_metric), monitor="val_%s" % self.main_metric, save_weights_only=True, save_best_only=True, mode = self.metric_mode) # period=3, 
 
 
     @property
@@ -133,18 +151,19 @@ class BaseModel:
         self.save_weights()
         return history
 
-    def flow_from_dataframe(self, dataframe, subset = None, class_mode = "multi_output", directory = "images"):
-        return self.data_generator.flow_from_dataframe(dataframe = train_df,
+    def flow_from_dataframe(self, dataframe, subset = None, class_mode = "raw", directory = "preprocessed"): # "images"):
+        return self.data_generator.flow_from_dataframe(dataframe = dataframe,
                                                        subset = subset,
                                                        directory = directory,
                                                        x_col = "image_id",
-                                                       y_col = ("healthy", "multiple_diseases", "rust", "scab"),
-                                                       has_ext = False,
-                                                       class_mode = class_mode)
+                                                       y_col = ["healthy", "multiple_diseases", "rust", "scab"],
+                                                       # has_ext = False,
+                                                       class_mode = class_mode,
+                                                       target_size = self.input_shape[:2])
 
-    def fit_df(self, df, **kwargs):
-        train_generator = self.flow_from_dataframe(df, "training", **kwargs)
-        validation_generator = self.flow_from_dataframe(df, "validation", **kwargs)
+    def fit_df(self, train_df, validation_df, **kwargs):
+        train_generator = self.flow_from_dataframe(train_df, **kwargs) # , "training", **kwargs)
+        validation_generator = self.flow_from_dataframe(validation_df, **kwargs) # "validation", **kwargs)
 
 
         history = self.model.fit_generator(generator = train_generator,
@@ -153,8 +172,8 @@ class BaseModel:
                                            validation_steps = steps_from_gen(validation_generator),
                                            epochs = self.epochs,
                                            callbacks = self.callbacks,
-                                           verbose = self.verbose,
-                                           batch_size = self.batch_size)
+                                           verbose = self.verbose)
+                                           # batch_size = self.batch_size)
         self.save_weights()
         return history
 
@@ -166,7 +185,7 @@ class BaseModel:
                                    use_multiprocessing = self.use_multiprocessing)
 
     def evaluate_df(self, df, **kwargs):
-        test_generator = self.flow_from_dataframe(df, "testing", **kwargs)
+        test_generator = self.flow_from_dataframe(df, **kwargs) # , "testing", **kwargs)
         return self.model.evaluate_generator(generator = test_generator,
                                              steps = steps_from_gen(test_generator),
                                              callbacks = self.callbacks,
