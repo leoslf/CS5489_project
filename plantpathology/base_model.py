@@ -35,14 +35,16 @@ class BaseModel:
         self.use_multiprocessing = use_multiprocessing
         self.validation_split = validation_split
         self.testing_split = testing_split
-        self.data_generator = TrisplitImageDataGenerator(validation_split=self.validation_split,
-                                                         testing_split=self.testing_split,
+        self.data_generator = TrisplitImageDataGenerator(# validation_split=self.validation_split,
+                                                         # testing_split=self.testing_split,
                                                          # rescale=1./255.,
                                                          preprocessing_function = self.preprocessing_function)
         self.__dict__.update(kwargs)
 
         self.init()
-        self.model = self.prepare_model()
+        self.base_model = self.prepare_base_model()
+        self.model_output = self.prepare_model(inputs = self.base_model.output)
+        self.model = Model(self.base_model.input, self.model_output, name = self.name)
         self.model.compile(loss=self.loss, optimizer=self.optimizer, metrics=self.metrics)
 
         try:
@@ -52,7 +54,8 @@ class BaseModel:
 
         if not self.compiled:
             self.model.compile(loss=self.loss, optimizer=self.optimizer, metrics=self.metrics)
-            print ("compiled: %s" % self.__class__.__name__)
+            self.compiled = True
+            print ("compiled: %s" % self.name)
 
         # self.model.summary()
 
@@ -92,7 +95,7 @@ class BaseModel:
 
     @property
     def metrics(self):
-        return [AUC()]
+        return [roc_auc] # AUC()]
 
 
     @property
@@ -101,7 +104,7 @@ class BaseModel:
 
     @property
     def main_metric(self):
-        return "auc_2"
+        return "roc_auc"
 
     @property
     def metric_mode(self):
@@ -112,7 +115,7 @@ class BaseModel:
        return CustomEarlyStopping(monitor="val_%s" % self.main_metric, # use validation accuracy for stopping
                                   mode = self.metric_mode,
                                   # min_delta = 0.0001,
-                                  patience = 20, 
+                                  patience = 1, 
                                   verbose = self.verbose,
                                   target = 0.9)
 
@@ -137,7 +140,10 @@ class BaseModel:
     def logdir(self):
         return "logs/%s/%s" % (self.__class__.__name__, datetime.now().strftime("%Y%m%d-%H%M%S"))
 
-    def prepare_model(self):
+    def prepare_base_model(self):
+        raise NotImplementedError("prepare_base_model must be overrided by subclass")
+
+    def prepare_model(self, inputs):
         raise NotImplementedError("prepare_model must be overrided by subclass")
 
     def fit(self, train_X, train_Y, validation_X, validation_Y):
@@ -151,7 +157,7 @@ class BaseModel:
         self.save_weights()
         return history
 
-    def flow_from_dataframe(self, dataframe, subset = None, class_mode = "raw", directory = "preprocessed"): # "images"):
+    def flow_from_dataframe(self, dataframe, subset = None, class_mode = "raw", directory = "preprocessed", **kwargs):
         return self.data_generator.flow_from_dataframe(dataframe = dataframe,
                                                        subset = subset,
                                                        directory = directory,
@@ -159,7 +165,9 @@ class BaseModel:
                                                        y_col = ["healthy", "multiple_diseases", "rust", "scab"],
                                                        # has_ext = False,
                                                        class_mode = class_mode,
-                                                       target_size = self.input_shape[:2])
+                                                       target_size = self.input_shape[:2],
+                                                       validate_filenames = True,
+                                                       **kwargs)
 
     def fit_df(self, train_df, validation_df, **kwargs):
         train_generator = self.flow_from_dataframe(train_df, **kwargs) # , "training", **kwargs)
@@ -188,15 +196,15 @@ class BaseModel:
         test_generator = self.flow_from_dataframe(df, **kwargs) # , "testing", **kwargs)
         return self.model.evaluate_generator(generator = test_generator,
                                              steps = steps_from_gen(test_generator),
-                                             callbacks = self.callbacks,
+                                             # callbacks = self.callbacks,
                                              verbose = self.verbose)
 
     def predict(self, X, *argv, **kwargs):
         return self.model.predict(X, *argv, **kwargs)
 
     def predict_df(self, df, **kwargs):
-        test_generator = self.flow_from_dataframe(df, class_mode = None, **kwargs)
-        return self.model.predict_generator(test_generator,
+        test_generator = self.flow_from_dataframe(df, class_mode = None, batch_size = 1, **kwargs)
+        return self.model.predict_generator(generator = test_generator,
                                             steps = steps_from_gen(test_generator),
-                                            callbacks = self.callbacks,
+                                            # callbacks = self.callbacks,
                                             verbose = self.verbose)

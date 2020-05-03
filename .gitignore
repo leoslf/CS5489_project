@@ -146,5 +146,8 @@ logs_old/*
 
 images/
 *.zip
-*.bak
+*.bak*
 preprocessed/
+*.png
+
+*.csv

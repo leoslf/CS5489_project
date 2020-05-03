@@ -17,8 +17,7 @@ class BaselineCNN(BaseModel):
     def dropout_rate(self):
         return 0.3
 
-    def prepare_model(self):
-        # base_model = inception_resnet_v2.InceptionResNetV2(include_top = False,
+    def prepare_base_model(self):
         base_model = inception_v3.InceptionV3(include_top = False,
                                               weights = "imagenet",
                                               input_shape = self.input_shape)
@@ -26,15 +25,17 @@ class BaselineCNN(BaseModel):
         for layer in base_model.layers:
             layer.trainable = False
 
-        inputs = base_model.output
+        return base_model
 
+
+    def prepare_model(self, inputs):
         # Dimensionality Reduction
-        conv_1_reduce = Conv2D(64, (1, 1), padding = "valid", activation = "relu", kernel_regularizer = self.kernel_regularizer)(inputs)
-        conv_1 = Conv2D(192, (3, 3), padding = "same", activation = "relu", kernel_regularizer = self.kernel_regularizer)(conv_1_reduce)
-        conv_1_bn = BatchNormalization()(conv_1)
-        conv_1_activation = Activation("relu")(conv_1_bn)
+        conv_1_reduce = Conv2D(64, (1, 1), padding = "valid", activation = "relu", kernel_regularizer = self.kernel_regularizer, name = "conv_1_reduce")(inputs)
+        conv_1 = Conv2D(192, (3, 3), padding = "same", activation = "relu", kernel_regularizer = self.kernel_regularizer, name = "conv_1")(conv_1_reduce)
+        conv_1_bn = BatchNormalization(name = "conv_1_bn")(conv_1)
+        conv_1_activation = Activation("relu", name = "conv_1_activation")(conv_1_bn)
         
-        pool_1 = MaxPooling2D(pool_size = (3, 3), strides = (2, 2), padding = "valid")(conv_1_activation)
+        pool_1 = MaxPooling2D(pool_size = (3, 3), strides = (2, 2), padding = "valid", name = "maxpool_1")(conv_1_activation)
 
         flatten = Flatten()(pool_1) # inputs)
 
@@ -45,7 +46,7 @@ class BaselineCNN(BaseModel):
         # dropout_2 = Dropout(self.dropout_rate)(fc_2)
 
         # fc_3 = Dense(256, activation = "relu", kernel_regularizer = self.kernel_regularizer, name = "fc_3")(dropout_2)
-        fc_3 = Dense(256, activation = "relu", kernel_regularizer = self.kernel_regularizer, name = "fc_3")(flatten) # dropout_2)
+        fc_3 = Dense(256, activation = "relu", kernel_regularizer = self.kernel_regularizer, name = "fc_3")(flatten)
         dropout_3 = Dropout(self.dropout_rate)(fc_3)
 
         fc_4 = Dense(128, activation = "relu", kernel_regularizer = self.kernel_regularizer, name = "fc_4")(dropout_3)
@@ -63,7 +64,35 @@ class BaselineCNN(BaseModel):
         fc_8 = Dense(self.output_shape[0], kernel_regularizer = self.kernel_regularizer, name = "fc_8")(dropout_7)
         outputs = Activation("softmax", name = "output")(fc_8)
 
-        return Model(base_model.input, outputs, name = self.name)
+        return outputs
 
+class SENetTrial(BaselineCNN):
+    @property
+    def squeeze_excite_ratio(self):
+        return 16
+
+    def prepare_model(self, inputs):
+        inputs_attention = self.se_block(inputs)
+        return super().prepare_model(inputs_attention)
+
+    def se_block(self, inputs):
+        initial_input = inputs
+        channel_axis = 1 if K.image_data_format() == "channels_first" else -1
+        filters = initial_input._keras_shape[channel_axis]
+
+        global_pool = GlobalAveragePooling2D()(inputs)
+        reshape = Reshape((1, 1, filters))(global_pool)
+        fc_1 = Dense(filters // self.squeeze_excite_ratio, activation = "relu", kernel_initializer = "he_normal", use_bias = False, name = "se_fc_1")(reshape)
+        fc_2 = Dense(filters, activation = "sigmoid", kernel_initializer = "he_normal", use_bias = False, name = "se_fc_2")(fc_1)
+
+        if K.image_data_format() == "channels_first":
+            fc_2 = Permute((3, 1, 2))(fc_2)
+
+        return multiply([initial_input, fc_2])
+
+
+
+
+# class ResNetTrial(BaselineCNN):
 
 

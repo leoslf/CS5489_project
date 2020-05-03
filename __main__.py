@@ -9,6 +9,7 @@ datasets = ["train", "test"]
 
 models = [
     "BaselineCNN",
+    "SENetTrial",
 ]
 
 def get_model(name, *argv, **kwargs):
@@ -23,6 +24,7 @@ if __name__ == "__main__":
     logging.getLogger("PIL").setLevel(level=logging.ERROR)
     # Muting Tensorflow warning
     logging.getLogger("tensorflow").setLevel(level=logging.ERROR)
+    logging.getLogger("matplotlib").setLevel(level=logging.ERROR)
 
     logging.basicConfig(level=logging.DEBUG)
     vanilla_df, vanilla_test_output_df = list(map(lambda basename: pd.read_csv("%s.csv" % basename), datasets))
@@ -37,7 +39,7 @@ if __name__ == "__main__":
 
     losses = {}
 
-    metrics = ["loss", "auc_2"]
+    metrics = ["loss", "roc_auc"]
 
     tee_val = lambda metric: (metric, "val_" + metric)
 
@@ -47,7 +49,7 @@ if __name__ == "__main__":
 
             ax.plot(history.history[metric], label = "Train")
             ax.plot(history.history[val_metric], label = "Validation")
-            ax.title("Model: %s - %s" % (model.name, metric))
+            ax.set_title("Model: %s - %s" % (model.name, metric))
             ax.set_xlabel("Epoch")
             ax.set_ylabel(metric)
 
@@ -67,16 +69,31 @@ if __name__ == "__main__":
 
         logger.info("model \"%s\": testing loss: %f", model.name, test_loss)
 
-        losses[model.name] = { key: value.copy() for (key, value) in test_loss.items() }
+        losses[model.name] = dict(zip(metrics, test_metrics)) # { key: value.copy() for (key, value) in test_loss.items() }
 
-        predicted = model.predict_df(test_df)
-        with open("%s_predicted_auc_%.4f.pickle" % (model.name, test_loss["auc_2"]), "wb") as f:
-            pickle.dump(predicted, f)
-
-        predicted_df = pd.DataFrame(data = dict(zip(train_df.columns, [vanilla_test_output_df.image_id] + predicted.T.tolist())))
-        predicted_df.to_csv("%s_predicted_auc_%.4f.csv" % (model.name, test_auc_2))
+        
 
         handle_history(model, history, "auc", test_auc_2)
+
+
+        try:
+            predicted = model.predict_df(test_output_df)
+            with open("%s_predicted_auc_%.4f.pickle" % (model.name, test_auc_2), "wb") as f:
+                pickle.dump(predicted, f)
+
+            data = {
+                "image_id": vanilla_test_output_df.image_id
+            }
+            logger.info("model: %s, column_name: image_id, shape: %d", model.name, len(test_output_df.image_id))
+            for column_name, values in zip(train_df.columns[1:], predicted.T):
+                data[column_name] = values
+                logger.info("model: %s, column_name: %s, shape: %r", model.name, column_name, values.shape)
+
+
+            predicted_df = pd.DataFrame(data = data)
+            predicted_df.to_csv("%s_predicted_auc_%.4f.csv" % (model.name, test_auc_2))
+        except Exception as e:
+            logger.exception(e)
 
 
 
