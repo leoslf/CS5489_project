@@ -40,6 +40,8 @@ with warnings.catch_warnings():
 from sklearn.metrics import roc_auc_score 
 from sklearn.model_selection import train_test_split
 
+import matplotlib.pyplot as plt
+
 logger = logging.getLogger(__name__)
 
 def compose(*functions):
