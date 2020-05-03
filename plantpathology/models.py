@@ -90,9 +90,8 @@ class SENetTrial(BaselineCNN):
 
         return multiply([initial_input, fc_2])
 
+class ResNetTrial(BaselineCNN):
+    pass
 
-
-
-# class ResNetTrial(BaselineCNN):
 
 

@@ -54,7 +54,7 @@ if __name__ == "__main__":
             ax.set_ylabel(metric)
 
             fig.legend(loc = "upper right")
-            fig.savefig("%(model_name)s_%(metric)s_%(test_metric)s_%(value).4f.png" % dict(model_name = model.name, metric = metric, test_metric = test_metric, value = test_metric_value))
+            fig.savefig("outputs/%(model_name)s_%(metric)s_%(test_metric)s_%(value).4f.png" % dict(model_name = model.name, metric = metric, test_metric = test_metric, value = test_metric_value))
             
             plt.close(fig)
 
@@ -78,9 +78,6 @@ if __name__ == "__main__":
 
         try:
             predicted = model.predict_df(test_output_df)
-            with open("%s_predicted_auc_%.4f.pickle" % (model.name, test_auc_2), "wb") as f:
-                pickle.dump(predicted, f)
-
             data = {
                 "image_id": vanilla_test_output_df.image_id
             }
@@ -91,7 +88,8 @@ if __name__ == "__main__":
 
 
             predicted_df = pd.DataFrame(data = data)
-            predicted_df.to_csv("%s_predicted_auc_%.4f.csv" % (model.name, test_auc_2))
+            predicted_df.to_csv("outputs/%s_predicted_auc_%.4f.csv" % (model.name, test_auc_2))
+            model.save_weights("outputs/%s_predicted_auc_%.4f.h5" % (model.name, test_auc_2))
         except Exception as e:
             logger.exception(e)
 

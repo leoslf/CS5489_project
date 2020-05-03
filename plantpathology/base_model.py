@@ -90,8 +90,10 @@ class BaseModel:
         if os.path.exists(filename):
             self.model.load_weights(filename, by_name=True, skip_mismatch=True)
 
-    def save_weights(self):
-        self.model.save_weights(self.weight_filename)
+    def save_weights(self, filename = None):
+        if filename is None:
+            filename = self.weight_filename
+        self.model.save_weights(filename)
 
     @property
     def metrics(self):
@@ -114,10 +116,11 @@ class BaseModel:
     def earlystopping(self):
        return CustomEarlyStopping(monitor="val_%s" % self.main_metric, # use validation accuracy for stopping
                                   mode = self.metric_mode,
-                                  # min_delta = 0.0001,
-                                  patience = 1, 
+                                  min_delta = 0.0001,
+                                  patience = 20, 
                                   verbose = self.verbose,
-                                  target = 0.9)
+                                  target = 0.9,
+                                  restore_best_weights = True)
 
     @property
     def modelcheckpoint(self):
