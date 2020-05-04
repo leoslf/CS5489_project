@@ -151,3 +151,5 @@ preprocessed/
 *.png
 
 *.csv
+
+*.ipynb

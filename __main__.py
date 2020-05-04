@@ -10,12 +10,15 @@ datasets = ["train", "test"]
 models = [
     "BaselineCNN",
     "SENetTrial",
+    "DenseNetTrial",
 ]
 
 def get_model(name, *argv, **kwargs):
     return globals()[name](*argv, **kwargs)
 
 def add_ext(df):
+    # Copy
+    df = df.copy()
     df["image_id"] += ".png" # ".jpg"
     return df # new_df
 
@@ -72,7 +75,6 @@ if __name__ == "__main__":
         losses[model.name] = dict(zip(metrics, test_metrics)) # { key: value.copy() for (key, value) in test_loss.items() }
 
         
-
         handle_history(model, history, "auc", test_auc_2)
 
 
@@ -88,7 +90,7 @@ if __name__ == "__main__":
 
 
             predicted_df = pd.DataFrame(data = data)
-            predicted_df.to_csv("outputs/%s_predicted_auc_%.4f.csv" % (model.name, test_auc_2))
+            predicted_df.to_csv("outputs/%s_predicted_auc_%.4f.csv" % (model.name, test_auc_2), index = False, float_format = "%.8f")
             model.save_weights("outputs/%s_predicted_auc_%.4f.h5" % (model.name, test_auc_2))
         except Exception as e:
             logger.exception(e)

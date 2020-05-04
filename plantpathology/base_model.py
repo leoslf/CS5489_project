@@ -106,11 +106,11 @@ class BaseModel:
 
     @property
     def main_metric(self):
-        return "roc_auc"
+        return "loss" # "roc_auc"
 
     @property
     def metric_mode(self):
-        return "max"
+        return "min" # "max"
 
     @property
     def earlystopping(self):
@@ -119,7 +119,8 @@ class BaseModel:
                                   min_delta = 0.0001,
                                   patience = 20, 
                                   verbose = self.verbose,
-                                  target = 0.9,
+                                  target = 0.2,
+                                  # baseline = 0.9,
                                   restore_best_weights = True)
 
     @property
